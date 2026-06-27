@@ -22,9 +22,16 @@ mermaid.parseError = (err, hash) => {
 const sanitizeMermaid = (chart: string): string => {
   let clean = chart.replace(/```mermaid\n?/g, '').replace(/```\n?/g, '').trim();
   
-  // Convert semicolons to newlines (respecting double quotes) to support single-line syntax
+  // 1. Replace invalid arrow directions (<---, <-- or <==) with standard arrows
+  clean = clean
+    .replace(/<---/g, '-->')
+    .replace(/<--/g, '-->')
+    .replace(/<==/g, '==>');
+
+  // 2. Convert semicolons and multi-spaces to newlines (respecting double quotes)
   let insideQuotes = false;
   let cleanWithNewlines = '';
+  let consecutiveSpaces = 0;
   for (let i = 0; i < clean.length; i++) {
     const char = clean[i];
     if (char === '"') {
@@ -32,7 +39,18 @@ const sanitizeMermaid = (chart: string): string => {
     }
     if (char === ';' && !insideQuotes) {
       cleanWithNewlines += '\n';
+      consecutiveSpaces = 0;
+    } else if ((char === ' ' || char === '\t') && !insideQuotes) {
+      consecutiveSpaces++;
+      if (consecutiveSpaces >= 3) {
+        cleanWithNewlines = cleanWithNewlines.substring(0, cleanWithNewlines.length - (consecutiveSpaces - 1));
+        cleanWithNewlines += '\n';
+        consecutiveSpaces = 0;
+      } else {
+        cleanWithNewlines += char;
+      }
     } else {
+      consecutiveSpaces = 0;
       cleanWithNewlines += char;
     }
   }
@@ -45,18 +63,37 @@ const sanitizeMermaid = (chart: string): string => {
 
   const lines = clean.split('\n');
   const processedLines = lines.map(line => {
-    let newLine = line;
-    
-    // 1. Fix rounded parentheses: ID(Text (Nested) Text) -> ID("Text (Nested) Text")
+    let newLine = line.trim();
+    if (!newLine) return '';
+
+    // 3. Strip trailing connection arrows (e.g. "F -->" or "F -.->")
+    newLine = newLine.replace(/(?:-->|-\.-\/>|==>)\s*$/, '').trim();
+
+    // 4. Expand "A --> B & C" into separate lines to avoid parsing errors
+    if ((newLine.includes('-->') || newLine.includes('-.->') || newLine.includes('==>')) && newLine.includes('&')) {
+      const isDashed = newLine.includes('-.->');
+      const isThick = newLine.includes('==>');
+      const separator = isDashed ? '-.->' : (isThick ? '==>' : '-->');
+      const parts = newLine.split(separator);
+      if (parts.length === 2) {
+        const source = parts[0].trim();
+        const targets = parts[1].split('&').map(t => t.trim());
+        if (targets.length > 1) {
+          return targets.map(t => `${source} ${separator} ${t}`).join('\n');
+        }
+      }
+    }
+
+    // 5. Fix rounded parentheses: ID(Text (Nested) Text) -> ID("Text (Nested) Text")
     const roundedRegex = /(\w+)\(([^"\n]+)\)/g;
     newLine = newLine.replace(roundedRegex, (match, id, text) => {
       if (text.includes('(') || text.includes(')') || text.includes('-') || text.includes('/') || text.includes(' ')) {
-        return `${id}("${text.replace(/"/g, '\\"')}")`;
+        return `${id}(" ${text.replace(/"/g, '\\"')}")`;
       }
       return match;
     });
 
-    // 2. Fix square brackets: ID[Text [Nested] Text] -> ID["Text [Nested] Text"]
+    // 6. Fix square brackets: ID[Text [Nested] Text] -> ID["Text [Nested] Text"]
     const squareRegex = /(\w+)\[([^"\n]+)\]/g;
     newLine = newLine.replace(squareRegex, (match, id, text) => {
       if (text.includes('[') || text.includes(']') || text.includes('-') || text.includes('/') || text.includes(' ')) {
@@ -68,7 +105,7 @@ const sanitizeMermaid = (chart: string): string => {
     return newLine;
   });
 
-  return processedLines.join('\n');
+  return processedLines.filter(l => l).join('\n');
 };
 
 export const MermaidDiagram: React.FC<MermaidDiagramProps> = ({ chart, isExpanded = false }) => {

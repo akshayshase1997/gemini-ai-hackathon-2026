@@ -313,10 +313,18 @@ const parseMermaid = (chart: string): { nodes: Node[]; edges: Edge[] } => {
   const edges: Edge[] = [];
   const nodeMap = new Map<string, Node>();
 
-  // Preprocess semicolons to newlines (respecting double quotes) to support single-line syntax
   let cleanChart = chart.replace(/```mermaid\n?/g, '').replace(/```\n?/g, '').trim();
+  
+  // 1. Repair invalid arrow formats
+  cleanChart = cleanChart
+    .replace(/<---/g, '-->')
+    .replace(/<--/g, '-->')
+    .replace(/<==/g, '==>');
+
+  // 2. Preprocess semicolons and multi-spaces to newlines (respecting double quotes) to support single-line syntax
   let insideQuotes = false;
   let chartWithNewlines = '';
+  let consecutiveSpaces = 0;
   for (let i = 0; i < cleanChart.length; i++) {
     const char = cleanChart[i];
     if (char === '"') {
@@ -324,21 +332,31 @@ const parseMermaid = (chart: string): { nodes: Node[]; edges: Edge[] } => {
     }
     if (char === ';' && !insideQuotes) {
       chartWithNewlines += '\n';
+      consecutiveSpaces = 0;
+    } else if ((char === ' ' || char === '\t') && !insideQuotes) {
+      consecutiveSpaces++;
+      if (consecutiveSpaces >= 3) {
+        chartWithNewlines = chartWithNewlines.substring(0, chartWithNewlines.length - (consecutiveSpaces - 1));
+        chartWithNewlines += '\n';
+        consecutiveSpaces = 0;
+      } else {
+        chartWithNewlines += char;
+      }
     } else {
+      consecutiveSpaces = 0;
       chartWithNewlines += char;
     }
   }
 
   // Extract pure contents
-  const lines = chartWithNewlines
+  const lines: string[] = [];
+  chartWithNewlines
     .split('\n')
     .map(l => {
       let trimmed = l.trim();
-      // Remove trailing semicolons
       if (trimmed.endsWith(';')) {
         trimmed = trimmed.substring(0, trimmed.length - 1).trim();
       }
-      // Remove comments
       if (trimmed.includes('%%')) {
         trimmed = trimmed.split('%%')[0].trim();
       }
@@ -354,14 +372,36 @@ const parseMermaid = (chart: string): { nodes: Node[]; edges: Edge[] } => {
                 !l.startsWith('click') && 
                 !l.startsWith('linkStyle') && 
                 !l.startsWith('direction') && 
-                l !== 'end');
+                l !== 'end')
+    .forEach(l => {
+      // 3. Strip trailing connection arrows (e.g. "F -->" or "F -.->")
+      let cleanLine = l.replace(/(?:-->|-\.-\/>|==>)\s*$/, '').trim();
+      if (!cleanLine) return;
+
+      // 4. Expand "A --> B & C" into individual lines for the edge parser
+      if ((cleanLine.includes('-->') || cleanLine.includes('-.->') || cleanLine.includes('==>')) && cleanLine.includes('&')) {
+        const isDashed = cleanLine.includes('-.->');
+        const isThick = cleanLine.includes('==>');
+        const separator = isDashed ? '-.->' : (isThick ? '==>' : '-->');
+        const parts = cleanLine.split(separator);
+        if (parts.length === 2) {
+          const source = parts[0].trim();
+          const targets = parts[1].split('&').map(t => t.trim());
+          if (targets.length > 1) {
+            targets.forEach(t => lines.push(`${source} ${separator} ${t}`));
+            return;
+          }
+        }
+      }
+      lines.push(cleanLine);
+    });
 
   // Helper to parse individual node parts like A["Label"] or B(Label)
   const parseNodePart = (part: string): string => {
-    const bracketMatch = part.match(/^([a-zA-Z0-9_\-]+)\s*(?:\["([^"]+)"\]|\[([^\]]+)\]|\("([^"]+)"\)|\(([^)]+)\))$/);
+    const bracketMatch = part.match(/^([a-zA-Z0-9_\-]+)\s*(?:\["([^"]+)"\]|\[([^\]]+)\]|\("([^"]+)"\)|\(([^)]+)\)|\{"([^"]+)"\}|\{([^}]+)\})$/);
     if (bracketMatch) {
       const id = bracketMatch[1];
-      const label = bracketMatch[2] || bracketMatch[3] || bracketMatch[4] || bracketMatch[5] || id;
+      const label = bracketMatch[2] || bracketMatch[3] || bracketMatch[4] || bracketMatch[5] || bracketMatch[6] || bracketMatch[7] || id;
       if (!nodeMap.has(id)) {
         const type = detectGcpType(label);
         const node = { id, label, type, level: assignLevel(type) };

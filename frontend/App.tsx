@@ -315,7 +315,7 @@ const App: React.FC = () => {
   const [personaExpanded, setPersonaExpanded] = useState(true);
   const [constraintsExpanded, setConstraintsExpanded] = useState(true);
   const [showWhiteboard, setShowWhiteboard] = useState(false);
-  const [antigravityMode, setAntigravityMode] = useState(true);
+  const [antigravityMode, setAntigravityMode] = useState(false);
   const [agentLogs, setAgentLogs] = useState<string[]>([]);
   const [costMultiplier, setCostMultiplier] = useState(1);
   const [resolvedFindings, setResolvedFindings] = useState<Record<string, boolean>>({});
@@ -762,10 +762,6 @@ const App: React.FC = () => {
             ? 'Deploying secure Antigravity Remote Sandbox...' 
             : 'Analyzing design options for Security, Cost, and Reliability...'
         }));
-
-        if (antigravityMode) {
-          await new Promise(resolve => setTimeout(resolve, 1500));
-        }
 
         review = await reviewArchitecture(design, selectedConstraints, activeStrategy);
       } else {

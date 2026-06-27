@@ -54,7 +54,17 @@ export const generateArchitecture = async (
   - If the user uploads an image, use it as an architecture hint.
   - Return practical architecture decisions, not generic cloud advice.
   - The mermaid_diagram for each stage MUST be raw mermaid syntax (e.g., graph TD...) without markdown code blocks.
-  - CRITICAL: If any node label contains parentheses, brackets, or special characters (for example, "HTTP(S)", "VMs", "Auto-scaling"), you MUST enclose the label in double quotes inside the shape delimiters. For example, use C("External HTTP(S) Load Balancer") instead of C(External HTTP(S) Load Balancer), and D["Cloud Run (Serverless)"] instead of D[Cloud Run (Serverless)].\n\n`;
+  - CRITICAL MERMAID SYNTAX RULES:
+    1. Each node declaration and link in the Mermaid diagram MUST be on a distinct new line. NEVER output multiple statements on the same line or compress them.
+    2. NEVER use custom or invalid arrow directions/shapes (such as '<---', '<--', '<==', or '<-->'). ONLY use standard directed arrows: '-->' (solid), '-.->' (dotted), or '==>' (thick).
+    3. NEVER use the grouping operator '&' (such as 'A --> B & C' or 'A & B --> C'). Every link must be declared individually on a separate line (e.g., 'A --> B' on line 1, 'A --> C' on line 2).
+    4. NEVER leave trailing or incomplete connection arrows (such as 'A -->' at the end of the diagram).
+    5. If any node label contains parentheses, brackets, or special characters (for example, "HTTP(S)", "VMs", "Auto-scaling", "WAF/DDoS"), you MUST enclose the label in double quotes inside the shape delimiters. For example, use C("External HTTP(S) Load Balancer") instead of C(External HTTP(S) Load Balancer), and D["Cloud Run (Serverless)"] instead of D[Cloud Run (Serverless)].
+  - Be extremely concise in all descriptions and lists. Limit explanations to the absolute bare minimum to optimize generation speed.
+  - For components: List at most 4-5 core components.
+  - For design_decisions: Provide at most 3 key decisions, each under 15 words.
+  - For summary: Provide a highly concise 2-sentence summary.
+  - For terraform_snippet: Provide a compact, minimal starter snippet of 15-25 lines focusing ONLY on the core service resource block (no excessive variables, locals, or providers) to reduce generation latency.\n\n`;
 
   if (strategy && strategy !== 'default') {
     instructions += "ACTIVE ANTIGRAVITY AGENT PERSONA / DESIGN STRATEGY:\n";
@@ -104,20 +114,20 @@ export const generateArchitecture = async (
   const stageSchema = {
     type: Type.OBJECT,
     properties: {
-      title: { type: Type.STRING, description: "A short, descriptive title for this specific stage of the architecture." },
-      summary: { type: Type.STRING, description: "A high-level summary of the architecture in this stage." },
-      mermaid_diagram: { type: Type.STRING, description: "Raw mermaid.js syntax (e.g. graph TD...). Do not wrap in markdown." },
+      title: { type: Type.STRING, description: "A very short, descriptive title for this specific stage of the architecture (max 5 words)." },
+      summary: { type: Type.STRING, description: "A highly concise 2-sentence summary of the architecture in this stage." },
+      mermaid_diagram: { type: Type.STRING, description: "Raw mermaid.js syntax (e.g. graph TD...). Keep the diagram minimal and clean with max 6-8 nodes to speed up rendering." },
       components: { 
         type: Type.ARRAY, 
         items: { type: Type.STRING },
-        description: "List of GCP components used in this stage."
+        description: "List of max 5 core GCP components used in this stage."
       },
-      terraform_snippet: { type: Type.STRING, description: "A starter Terraform snippet for the core components of this stage." },
-      estimated_monthly_cost: { type: Type.STRING, description: "A rough estimate of monthly cost for this stage (e.g., '$0 - $10' for MVP, '$200 - $400' for Enterprise)." },
+      terraform_snippet: { type: Type.STRING, description: "A very compact, minimal starter Terraform snippet for the core components under 25 lines. Avoid massive blocks, variables, or providers to optimize speed." },
+      estimated_monthly_cost: { type: Type.STRING, description: "A rough estimate of monthly cost (e.g., '$0-$10' or '$200-$400')." },
       design_decisions: { 
         type: Type.ARRAY, 
         items: { type: Type.STRING },
-        description: "Key architectural decisions made for this stage."
+        description: "Key architectural decisions made for this stage. Max 3 decisions, each max 15 words."
       },
     },
     required: ["title", "summary", "mermaid_diagram", "components", "terraform_snippet", "estimated_monthly_cost", "design_decisions"],
@@ -161,7 +171,8 @@ export const reviewArchitecture = async (
   - Review the specific architecture design provided for each stage.
   - Give concrete findings.
   - Prefer actionable fixes over theory.
-  - Keep the tone concise and technical.\n\n`;
+  - Keep the tone extremely concise and technical.
+  - Force maximum brevity to optimize generation latency: limit findings in security, cost, and reliability categories to at most 2 items each, and each item should be under 15 words.\n\n`;
 
   if (strategy && strategy !== 'default') {
     reviewPrompt += "ACTIVE ANTIGRAVITY AGENT PERSONA / AUDIT STRATEGY:\n";
@@ -202,11 +213,11 @@ export const reviewArchitecture = async (
     type: Type.OBJECT,
     properties: {
       overall_score: { type: Type.NUMBER, description: "Score out of 100." },
-      overall_verdict: { type: Type.STRING, description: "A one-sentence verdict." },
-      security: { type: Type.ARRAY, items: { type: Type.STRING }, description: "Security findings and recommendations." },
-      cost: { type: Type.ARRAY, items: { type: Type.STRING }, description: "Cost optimization findings." },
-      reliability: { type: Type.ARRAY, items: { type: Type.STRING }, description: "Reliability and scaling findings." },
-      top_3_actions: { type: Type.ARRAY, items: { type: Type.STRING }, description: "The top 3 most important actions to take." },
+      overall_verdict: { type: Type.STRING, description: "A highly concise, single-sentence verdict." },
+      security: { type: Type.ARRAY, items: { type: Type.STRING }, description: "Security findings and recommendations. Strictly max 2 items, each max 15 words." },
+      cost: { type: Type.ARRAY, items: { type: Type.STRING }, description: "Cost optimization findings. Strictly max 2 items, each max 15 words." },
+      reliability: { type: Type.ARRAY, items: { type: Type.STRING }, description: "Reliability and scaling findings. Strictly max 2 items, each max 15 words." },
+      top_3_actions: { type: Type.ARRAY, items: { type: Type.STRING }, description: "The top 3 most important actions to take. Keep each action item extremely short (max 15 words)." },
     },
     required: ["overall_score", "overall_verdict", "security", "cost", "reliability", "top_3_actions"],
   };
@@ -270,7 +281,8 @@ export const reviewExistingArchitecture = async (
   Rules:
   - Provide concrete, highly actionable findings.
   - Prefer practical fixes over theory.
-  - Keep the tone concise, professional, and technical.\n\n`;
+  - Keep the tone extremely concise, professional, and technical.
+  - Force maximum brevity to optimize generation latency: limit findings in security, cost, and reliability categories to at most 2 items each, and each item should be under 15 words.\n\n`;
 
   if (strategy && strategy !== 'default') {
     instructions += "ACTIVE ANTIGRAVITY AGENT PERSONA / AUDIT STRATEGY:\n";
@@ -313,11 +325,11 @@ export const reviewExistingArchitecture = async (
     type: Type.OBJECT,
     properties: {
       overall_score: { type: Type.NUMBER, description: "Score out of 100." },
-      overall_verdict: { type: Type.STRING, description: "A one-sentence verdict." },
-      security: { type: Type.ARRAY, items: { type: Type.STRING }, description: "Security findings and recommendations." },
-      cost: { type: Type.ARRAY, items: { type: Type.STRING }, description: "Cost optimization findings." },
-      reliability: { type: Type.ARRAY, items: { type: Type.STRING }, description: "Reliability and scaling findings." },
-      top_3_actions: { type: Type.ARRAY, items: { type: Type.STRING }, description: "The top 3 most important actions to take." },
+      overall_verdict: { type: Type.STRING, description: "A highly concise, single-sentence verdict." },
+      security: { type: Type.ARRAY, items: { type: Type.STRING }, description: "Security findings and recommendations. Strictly max 2 items, each max 15 words." },
+      cost: { type: Type.ARRAY, items: { type: Type.STRING }, description: "Cost optimization findings. Strictly max 2 items, each max 15 words." },
+      reliability: { type: Type.ARRAY, items: { type: Type.STRING }, description: "Reliability and scaling findings. Strictly max 2 items, each max 15 words." },
+      top_3_actions: { type: Type.ARRAY, items: { type: Type.STRING }, description: "The top 3 most important actions to take. Keep each action item extremely short (max 15 words)." },
     },
     required: ["overall_score", "overall_verdict", "security", "cost", "reliability", "top_3_actions"],
   };
