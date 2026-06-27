@@ -13,6 +13,20 @@ mermaid.initialize({
   securityLevel: 'loose',
   fontFamily: 'ui-sans-serif, system-ui, sans-serif',
   suppressErrors: true,
+  themeVariables: {
+    background: '#020617', // Match bg-slate-950 exactly
+    primaryColor: '#1e293b', // Match slate-800
+    primaryTextColor: '#f1f5f9', // Match slate-100
+    primaryBorderColor: '#334155', // Match slate-700
+    lineColor: '#64748b', // Match slate-500
+    secondaryColor: '#0f172a', // Match slate-900
+    tertiaryColor: '#1e1b4b', // Match indigo-950
+    mainBkg: '#020617',
+    nodeBorder: '#334155',
+    actorBorder: '#334155',
+    actorBkg: '#1e293b',
+    actorTextColor: '#f1f5f9',
+  }
 });
 
 mermaid.parseError = (err, hash) => {
@@ -121,8 +135,14 @@ export const MermaidDiagram: React.FC<MermaidDiagramProps> = ({ chart, isExpande
   const isPanning = useRef(false);
   const lastPointerPos = useRef({ x: 0, y: 0 });
 
+  // Reset zoom & pan when toggling fullscreen to ensure perfect centering in the new viewport
+  useEffect(() => {
+    handleResetZoom();
+  }, [isFullscreen]);
+
   useEffect(() => {
     let isMounted = true;
+    let tempDiv: HTMLDivElement | null = null;
 
     const renderChart = async () => {
       if (!chart) return;
@@ -139,18 +159,35 @@ export const MermaidDiagram: React.FC<MermaidDiagramProps> = ({ chart, isExpande
 
         const id = `mermaid-${Math.random().toString(36).substr(2, 9)}`;
         
-        // 2. Isolate SVG compilation inside a temporary detached DOM element
-        const tempDiv = document.createElement('div');
-        tempDiv.style.display = 'none';
+        // Declare and append temporary div safely
+        tempDiv = document.createElement('div');
+        tempDiv.style.position = 'absolute';
+        tempDiv.style.top = '-9999px';
+        tempDiv.style.left = '-9999px';
         document.body.appendChild(tempDiv);
-        
+
         try {
           const { svg } = await mermaid.render(id, cleanChart, tempDiv);
           if (isMounted) {
-            setSvgContent(svg);
+            // Clean up SVG tag attributes to enable fluid scaling while preventing container clipping
+            let processedSvg = svg;
+            const svgMatch = processedSvg.match(/<svg[^>]*>/);
+            if (svgMatch) {
+              let svgTag = svgMatch[0];
+              // Remove existing width, height, and style attributes that cause rigid bounds or duplicates
+              svgTag = svgTag
+                .replace(/\s+width="[^"]*"/g, '')
+                .replace(/\s+height="[^"]*"/g, '')
+                .replace(/\s+style="[^"]*"/g, '');
+              
+              // Inject clean attributes for perfect fluid scaling and zero clipping
+              svgTag = svgTag.replace('<svg', '<svg width="100%" height="100%" style="max-width: 100%; max-height: 100%; width: auto; height: auto; display: block; overflow: visible;"');
+              processedSvg = processedSvg.replace(/<svg[^>]*>/, svgTag);
+            }
+            setSvgContent(processedSvg);
           }
         } finally {
-          if (document.body.contains(tempDiv)) {
+          if (tempDiv && document.body.contains(tempDiv)) {
             document.body.removeChild(tempDiv);
           }
         }
@@ -166,6 +203,9 @@ export const MermaidDiagram: React.FC<MermaidDiagramProps> = ({ chart, isExpande
 
     return () => {
       isMounted = false;
+      if (tempDiv && document.body.contains(tempDiv)) {
+        document.body.removeChild(tempDiv);
+      }
     };
   }, [chart]);
 
@@ -281,7 +321,7 @@ export const MermaidDiagram: React.FC<MermaidDiagramProps> = ({ chart, isExpande
                 transform: `translate(${panOffset.x}px, ${panOffset.y}px) scale(${scale})`,
                 transformOrigin: 'center center',
               }}
-              className="transition-transform duration-75 ease-out select-none pointer-events-none"
+              className="transition-transform duration-75 ease-out select-none pointer-events-none w-full h-full flex justify-center items-center"
               dangerouslySetInnerHTML={{ __html: svgContent }}
             />
 
@@ -330,7 +370,7 @@ export const MermaidDiagram: React.FC<MermaidDiagramProps> = ({ chart, isExpande
                   transform: `translate(${panOffset.x}px, ${panOffset.y}px) scale(${scale})`,
                   transformOrigin: 'center center',
                 }}
-                className="transition-transform duration-75 ease-out select-none pointer-events-none"
+                className="transition-transform duration-75 ease-out select-none pointer-events-none w-full h-full flex justify-center items-center"
                 dangerouslySetInnerHTML={{ __html: svgContent }}
               />
 
