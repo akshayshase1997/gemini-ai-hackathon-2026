@@ -12,11 +12,32 @@ mermaid.initialize({
   theme: 'dark', // Native Mermaid dark theme for perfect dashboard integration
   securityLevel: 'loose',
   fontFamily: 'ui-sans-serif, system-ui, sans-serif',
+  suppressErrors: true,
 });
+
+mermaid.parseError = (err, hash) => {
+  console.warn("Suppressed global Mermaid throw:", err);
+};
 
 const sanitizeMermaid = (chart: string): string => {
   let clean = chart.replace(/```mermaid\n?/g, '').replace(/```\n?/g, '').trim();
   
+  // Convert semicolons to newlines (respecting double quotes) to support single-line syntax
+  let insideQuotes = false;
+  let cleanWithNewlines = '';
+  for (let i = 0; i < clean.length; i++) {
+    const char = clean[i];
+    if (char === '"') {
+      insideQuotes = !insideQuotes;
+    }
+    if (char === ';' && !insideQuotes) {
+      cleanWithNewlines += '\n';
+    } else {
+      cleanWithNewlines += char;
+    }
+  }
+  clean = cleanWithNewlines;
+
   // Ensure it starts with a valid graph/flowchart definition
   if (!clean.startsWith('graph') && !clean.startsWith('flowchart') && !clean.startsWith('sequenceDiagram') && !clean.startsWith('classDiagram') && !clean.startsWith('stateDiagram')) {
     clean = 'graph TD\n' + clean;
@@ -67,16 +88,34 @@ export const MermaidDiagram: React.FC<MermaidDiagramProps> = ({ chart, isExpande
     let isMounted = true;
 
     const renderChart = async () => {
-      if (!chart || !containerRef.current) return;
+      if (!chart) return;
       
       try {
         setError(null);
         const cleanChart = sanitizeMermaid(chart);
-        const id = `mermaid-${Math.random().toString(36).substr(2, 9)}`;
-        const { svg } = await mermaid.render(id, cleanChart);
         
-        if (isMounted) {
-          setSvgContent(svg);
+        // 1. Pre-validate syntax before rendering to prevent compiler lockups
+        const isValid = await mermaid.parse(cleanChart, { suppressErrors: true });
+        if (isValid === false) {
+          throw new Error("Syntax error detected in the generated Mermaid definition.");
+        }
+
+        const id = `mermaid-${Math.random().toString(36).substr(2, 9)}`;
+        
+        // 2. Isolate SVG compilation inside a temporary detached DOM element
+        const tempDiv = document.createElement('div');
+        tempDiv.style.display = 'none';
+        document.body.appendChild(tempDiv);
+        
+        try {
+          const { svg } = await mermaid.render(id, cleanChart, tempDiv);
+          if (isMounted) {
+            setSvgContent(svg);
+          }
+        } finally {
+          if (document.body.contains(tempDiv)) {
+            document.body.removeChild(tempDiv);
+          }
         }
       } catch (err: any) {
         console.error("Mermaid rendering error:", err);

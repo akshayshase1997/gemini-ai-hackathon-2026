@@ -24,12 +24,12 @@ const PORT = process?.env?.PORT || process?.env?.API_BACKEND_PORT || 8080;
 // Default host to 0.0.0.0 in production/container environments to allow external requests
 const API_BACKEND_HOST = process?.env?.API_BACKEND_HOST || "0.0.0.0";
 
-const GOOGLE_CLOUD_LOCATION = process?.env?.GOOGLE_CLOUD_LOCATION;
-const GOOGLE_CLOUD_PROJECT = process?.env?.GOOGLE_CLOUD_PROJECT;
-if (!GOOGLE_CLOUD_PROJECT || !GOOGLE_CLOUD_LOCATION) {
-  console.error("Error: Environment variables GOOGLE_CLOUD_PROJECT and GOOGLE_CLOUD_LOCATION must be set.");
-  process.exit(1);
-}
+// Use explicit environment variables, falling back to active project/region configurations to prevent container boot crashes
+const GOOGLE_CLOUD_PROJECT = process?.env?.GOOGLE_CLOUD_PROJECT || "round-exchange-500614-m6";
+const GOOGLE_CLOUD_LOCATION = process?.env?.GOOGLE_CLOUD_LOCATION || "asia-northeast1";
+
+console.log(`[Node Proxy] Initializing with GOOGLE_CLOUD_PROJECT: ${GOOGLE_CLOUD_PROJECT}, GOOGLE_CLOUD_LOCATION: ${GOOGLE_CLOUD_LOCATION}`);
+
 // Default to the front-end interceptor token if not specified
 const PROXY_HEADER = process?.env?.PROXY_HEADER || "q_pugYyz5WZB85uiz2-b8uV7xHFXQt4d";
 
@@ -332,8 +332,8 @@ app.post('/api-proxy', async (req, res) => {
 const frontendDistPath = path.join(__dirname, '../frontend/dist');
 app.use(express.static(frontendDistPath));
 
-// Fallback all other routes to index.html for React SPA router
-app.get('*', (req, res, next) => {
+// Fallback all other routes to index.html for React SPA router (Express 5 named wildcard syntax)
+app.get('*any', (req, res, next) => {
   if (req.path.startsWith('/api') || req.path === '/api-proxy') {
     return next();
   }

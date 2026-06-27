@@ -1404,7 +1404,7 @@ const App: React.FC = () => {
           color: #0f172a !important;
         }
         .light-theme .glass-card {
-          background: rgba(255, 255, 255, 0.8) !important;
+          background: rgba(255, 255, 255, 0.9) !important;
           backdrop-filter: blur(16px);
           -webkit-backdrop-filter: blur(16px);
           border-color: #e2e8f0 !important;
@@ -1412,7 +1412,7 @@ const App: React.FC = () => {
         }
         /* Top Navigation Header Override */
         .light-theme .sticky {
-          background: rgba(255, 255, 255, 0.8) !important;
+          background: rgba(255, 255, 255, 0.9) !important;
           border-color: #e2e8f0 !important;
         }
         .light-theme .sticky h1 {
@@ -1426,31 +1426,78 @@ const App: React.FC = () => {
         .light-theme h1, .light-theme h2, .light-theme h3, .light-theme h4, .light-theme h5, .light-theme h6 {
           color: #0f172a !important;
         }
-        .light-theme .text-slate-100 { color: #1e293b !important; }
-        .light-theme .text-slate-200 { color: #334155 !important; }
-        .light-theme .text-slate-300 { color: #475569 !important; }
-        .light-theme .text-slate-400 { color: #64748b !important; }
-        .light-theme .text-slate-500 { color: #94a3b8 !important; }
+        .light-theme .text-slate-100 { color: #0f172a !important; }
+        .light-theme .text-slate-200 { color: #1e293b !important; }
+        .light-theme .text-slate-300 { color: #334155 !important; }
+        .light-theme .text-slate-400 { color: #475569 !important; }
+        .light-theme .text-slate-500 { color: #64748b !important; }
         .light-theme .text-white { color: #0f172a !important; }
         
-        /* Background Overrides */
-        .light-theme .bg-slate-950 {
-          background-color: #ffffff !important;
-          border-color: #e2e8f0 !important;
-        }
-        .light-theme .bg-slate-900 {
-          background-color: #f1f5f9 !important;
-          border-color: #cbd5e1 !important;
-        }
+        /* Background Overrides - remove muddy grey container backgrounds completely */
+        .light-theme .bg-slate-950,
+        .light-theme .bg-slate-900,
+        .light-theme .bg-slate-955,
+        .light-theme .bg-slate-900\/95,
+        .light-theme .bg-slate-900\/90,
+        .light-theme .bg-slate-900\/80,
         .light-theme .bg-slate-900\/60,
+        .light-theme .bg-slate-900\/50,
         .light-theme .bg-slate-900\/40,
         .light-theme .bg-slate-900\/30,
-        .light-theme .bg-slate-955,
+        .light-theme .bg-slate-900\/20,
+        .light-theme .bg-slate-900\/10,
+        .light-theme .bg-slate-900\/5,
+        .light-theme .bg-slate-950\/95,
+        .light-theme .bg-slate-950\/90,
+        .light-theme .bg-slate-950\/85,
+        .light-theme .bg-slate-950\/80,
+        .light-theme .bg-slate-950\/75,
+        .light-theme .bg-slate-950\/70,
         .light-theme .bg-slate-950\/60,
+        .light-theme .bg-slate-950\/50,
         .light-theme .bg-slate-950\/40,
-        .light-theme .bg-slate-950\/20 {
-          background-color: #f8fafc !important;
-          border-color: #e2e8f0 !important;
+        .light-theme .bg-slate-950\/30,
+        .light-theme .bg-slate-950\/20,
+        .light-theme .bg-slate-950\/10,
+        .light-theme .bg-slate-950\/5 {
+          background-color: #ffffff !important;
+          border-color: #cbd5e1 !important;
+        }
+
+        /* Hover background overrides */
+        .light-theme .hover\:bg-slate-950:hover,
+        .light-theme .hover\:bg-slate-900:hover,
+        .light-theme .hover\:bg-slate-850:hover,
+        .light-theme .hover\:bg-slate-800:hover,
+        .light-theme .hover\:bg-slate-700:hover,
+        .light-theme .hover\:bg-slate-900\/60:hover,
+        .light-theme .hover\:bg-slate-900\/50:hover,
+        .light-theme .hover\:bg-slate-900\/40:hover,
+        .light-theme .hover\:bg-slate-900\/30:hover {
+          background-color: #f1f5f9 !important;
+        }
+
+        /* Hover text overrides to prevent disappearing text on white bg */
+        .light-theme .hover\:text-white:hover { color: #0f172a !important; }
+        .light-theme .hover\:text-slate-100:hover { color: #0f172a !important; }
+        .light-theme .hover\:text-slate-200:hover { color: #1e293b !important; }
+        .light-theme .hover\:text-slate-300:hover { color: #334155 !important; }
+        .light-theme .hover\:text-slate-400:hover { color: #475569 !important; }
+
+        /* Group hover and button hover overrides */
+        .light-theme .group:hover .group-hover\:text-white,
+        .light-theme button:hover .group-hover\:text-white,
+        .light-theme .group:hover .group-hover\:text-slate-100,
+        .light-theme button:hover .group-hover\:text-slate-100,
+        .light-theme .group:hover .group-hover\:text-slate-200,
+        .light-theme button:hover .group-hover\:text-slate-200,
+        .light-theme .group:hover .group-hover\:text-slate-300,
+        .light-theme button:hover .group-hover\:text-slate-300 {
+          color: #1e293b !important;
+        }
+        .light-theme .group:hover .group-hover\:text-slate-400,
+        .light-theme button:hover .group-hover\:text-slate-400 {
+          color: #475569 !important;
         }
         
         /* Ensure Inputs, Textareas & Chat Boxes look amazing and are fully readable */
@@ -1502,17 +1549,14 @@ const App: React.FC = () => {
         }
         
         /* Border Overrides */
-        .light-theme .border-slate-800,
-        .light-theme .border-slate-850,
-        .light-theme .border-slate-855,
-        .light-theme .border-slate-800\/80,
-        .light-theme .border-slate-800\/60,
-        .light-theme .border-slate-800\/50,
-        .light-theme .border-slate-800\/40,
-        .light-theme .border-slate-750,
-        .light-theme .border-slate-700,
-        .light-theme .border-slate-700\/80 {
+        .light-theme [class*="border-slate-"] {
           border-color: #e2e8f0 !important;
+        }
+        /* Keep dark borders for terminal components */
+        .light-theme pre [class*="border-slate-"],
+        .light-theme .font-mono [class*="border-slate-"],
+        .light-theme .terminal-screen [class*="border-slate-"] {
+          border-color: #1e293b !important;
         }
         
         /* Scrollbar in Light Theme */

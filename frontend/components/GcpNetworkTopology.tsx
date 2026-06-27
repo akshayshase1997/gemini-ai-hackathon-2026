@@ -313,83 +313,117 @@ const parseMermaid = (chart: string): { nodes: Node[]; edges: Edge[] } => {
   const edges: Edge[] = [];
   const nodeMap = new Map<string, Node>();
 
+  // Preprocess semicolons to newlines (respecting double quotes) to support single-line syntax
+  let cleanChart = chart.replace(/```mermaid\n?/g, '').replace(/```\n?/g, '').trim();
+  let insideQuotes = false;
+  let chartWithNewlines = '';
+  for (let i = 0; i < cleanChart.length; i++) {
+    const char = cleanChart[i];
+    if (char === '"') {
+      insideQuotes = !insideQuotes;
+    }
+    if (char === ';' && !insideQuotes) {
+      chartWithNewlines += '\n';
+    } else {
+      chartWithNewlines += char;
+    }
+  }
+
   // Extract pure contents
-  const lines = chart
-    .replace(/```mermaid/g, '')
-    .replace(/```/g, '')
+  const lines = chartWithNewlines
     .split('\n')
-    .map(l => l.trim())
-    .filter(l => l.length > 0 && !l.startsWith('graph') && !l.startsWith('flowchart'));
+    .map(l => {
+      let trimmed = l.trim();
+      // Remove trailing semicolons
+      if (trimmed.endsWith(';')) {
+        trimmed = trimmed.substring(0, trimmed.length - 1).trim();
+      }
+      // Remove comments
+      if (trimmed.includes('%%')) {
+        trimmed = trimmed.split('%%')[0].trim();
+      }
+      return trimmed;
+    })
+    .filter(l => l.length > 0 && 
+                !l.startsWith('graph') && 
+                !l.startsWith('flowchart') && 
+                !l.startsWith('subgraph') && 
+                !l.startsWith('style') && 
+                !l.startsWith('classDef') && 
+                !l.startsWith('class') && 
+                !l.startsWith('click') && 
+                !l.startsWith('linkStyle') && 
+                !l.startsWith('direction') && 
+                l !== 'end');
+
+  // Helper to parse individual node parts like A["Label"] or B(Label)
+  const parseNodePart = (part: string): string => {
+    const bracketMatch = part.match(/^([a-zA-Z0-9_\-]+)\s*(?:\["([^"]+)"\]|\[([^\]]+)\]|\("([^"]+)"\)|\(([^)]+)\))$/);
+    if (bracketMatch) {
+      const id = bracketMatch[1];
+      const label = bracketMatch[2] || bracketMatch[3] || bracketMatch[4] || bracketMatch[5] || id;
+      if (!nodeMap.has(id)) {
+        const type = detectGcpType(label);
+        const node = { id, label, type, level: assignLevel(type) };
+        nodes.push(node);
+        nodeMap.set(id, node);
+      }
+      return id;
+    }
+    
+    const plainId = part.replace(/[^a-zA-Z0-9_\-]/g, '').trim();
+    if (plainId && !nodeMap.has(plainId)) {
+      const type = detectGcpType(part);
+      const node = { id: plainId, label: part, type, level: assignLevel(type) };
+      nodes.push(node);
+      nodeMap.set(plainId, node);
+    }
+    return plainId;
+  };
 
   lines.forEach((line) => {
-    // Check if it's an edge (-->)
+    // Check if it's an edge (--> or -.-> or ==>)
     if (line.includes('-->') || line.includes('-.->') || line.includes('==>')) {
       const isDashed = line.includes('-.->');
       const separator = isDashed ? '-.->' : (line.includes('==>') ? '==>' : '-->');
       const parts = line.split(separator);
       
       if (parts.length >= 2) {
-        let leftPart = parts[0].trim();
-        let rightPart = parts[1].trim();
-        let edgeLabel = '';
+        const parsedNodeIds: string[] = [];
+        
+        for (let i = 0; i < parts.length; i++) {
+          let part = parts[i].trim();
+          let edgeLabel = '';
 
-        if (rightPart.startsWith('|')) {
-          const match = rightPart.match(/^\|([^|]+)\|\s*(.+)$/);
-          if (match) {
-            edgeLabel = match[1].trim();
-            rightPart = match[2].trim();
-          }
-        }
-
-        const parseNodePart = (part: string): string => {
-          const bracketMatch = part.match(/^([a-zA-Z0-9_\-]+)\s*(?:\["([^"]+)"\]|\[([^\]]+)\]|\("([^"]+)"\)|\(([^)]+)\))$/);
-          if (bracketMatch) {
-            const id = bracketMatch[1];
-            const label = bracketMatch[2] || bracketMatch[3] || bracketMatch[4] || bracketMatch[5] || id;
-            if (!nodeMap.has(id)) {
-              const type = detectGcpType(label);
-              const node = { id, label, type, level: assignLevel(type) };
-              nodes.push(node);
-              nodeMap.set(id, node);
+          // If this is an intermediary or ending part with an edge label, e.g. -->|label| B
+          if (i > 0 && part.startsWith('|')) {
+            const match = part.match(/^\|([^|]+)\|\s*(.+)$/);
+            if (match) {
+              edgeLabel = match[1].trim();
+              part = match[2].trim();
             }
-            return id;
           }
-          
-          const plainId = part.replace(/[^a-zA-Z0-9_\-]/g, '').trim();
-          if (plainId && !nodeMap.has(plainId)) {
-            const type = detectGcpType(part);
-            const node = { id: plainId, label: part, type, level: assignLevel(type) };
-            nodes.push(node);
-            nodeMap.set(plainId, node);
+
+          const nodeId = parseNodePart(part);
+          parsedNodeIds.push(nodeId);
+
+          if (i > 0) {
+            const sourceId = parsedNodeIds[i - 1];
+            const targetId = nodeId;
+            if (sourceId && targetId) {
+              edges.push({
+                id: `${sourceId}-${targetId}-${Math.random().toString(36).substr(2, 4)}`,
+                source: sourceId,
+                target: targetId,
+                label: edgeLabel || undefined,
+              });
+            }
           }
-          return plainId;
-        };
-
-        const sourceId = parseNodePart(leftPart);
-        const targetId = parseNodePart(rightPart);
-
-        if (sourceId && targetId) {
-          edges.push({
-            id: `${sourceId}-${targetId}-${Math.random().toString(36).substr(2, 4)}`,
-            source: sourceId,
-            target: targetId,
-            label: edgeLabel,
-          });
         }
       }
     } else {
-      // Single node declaration: A["Label"]
-      const match = line.match(/^([a-zA-Z0-9_\-]+)\s*(?:\["([^"]+)"\]|\[([^\]]+)\]|\("([^"]+)"\)|\(([^)]+)\))\s*$/);
-      if (match) {
-        const id = match[1];
-        const label = match[2] || match[3] || match[4] || match[5] || id;
-        if (!nodeMap.has(id)) {
-          const type = detectGcpType(label);
-          const node = { id, label, type, level: assignLevel(type) };
-          nodes.push(node);
-          nodeMap.set(id, node);
-        }
-      }
+      // Single node declaration: A["Label"] or A(Label)
+      parseNodePart(line);
     }
   });
 
@@ -474,6 +508,7 @@ export const GcpNetworkTopology: React.FC<GcpNetworkTopologyProps> = ({ chart, i
   const [selectedNode, setSelectedNode] = useState<Node | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [pulseOffset, setPulseOffset] = useState(0);
+  const [error, setError] = useState<string | null>(null);
 
   // Zoom & Pan Interactive States
   const [scale, setScale] = useState(1);
@@ -487,23 +522,30 @@ export const GcpNetworkTopology: React.FC<GcpNetworkTopologyProps> = ({ chart, i
 
   const performLayout = () => {
     if (!chart) return;
-    const { nodes: parsedNodes, edges: parsedEdges } = parseMermaid(chart);
-    setNodes(parsedNodes);
-    setEdges(parsedEdges);
+    try {
+      setError(null);
+      const { nodes: parsedNodes, edges: parsedEdges } = parseMermaid(chart);
+      
+      if (parsedNodes.length === 0) {
+        throw new Error("No valid network topology nodes could be parsed from the Mermaid chart.");
+      }
 
-    // Group nodes by levels
-    const levelGroups: Record<number, string[]> = {};
-    parsedNodes.forEach(node => {
-      if (!levelGroups[node.level]) levelGroups[node.level] = [];
-      levelGroups[node.level].push(node.id);
-    });
+      setNodes(parsedNodes);
+      setEdges(parsedEdges);
 
-    const activeLevels = Object.keys(levelGroups).map(Number).sort((a, b) => a - b);
-    
-    // Dynamic dimensions to prevent overlap!
-    const maxNodesInCol = Math.max(...Object.values(levelGroups).map(g => g.length), 1);
-    const cardWidth = 165;
-    const cardHeight = 76;
+      // Group nodes by levels
+      const levelGroups: Record<number, string[]> = {};
+      parsedNodes.forEach(node => {
+        if (!levelGroups[node.level]) levelGroups[node.level] = [];
+        levelGroups[node.level].push(node.id);
+      });
+
+      const activeLevels = Object.keys(levelGroups).map(Number).sort((a, b) => a - b);
+      
+      // Dynamic dimensions to prevent overlap!
+      const maxNodesInCol = Math.max(...Object.values(levelGroups).map(g => g.length), 1);
+      const cardWidth = 165;
+      const cardHeight = 76;
     const minGapX = 75; // Expanded horizontal gap to leave ample breathing room
     const minGapY = 35; // Expanded vertical gap to leave ample breathing room
 
@@ -587,7 +629,7 @@ export const GcpNetworkTopology: React.FC<GcpNetworkTopologyProps> = ({ chart, i
     const graphCenterY = minY + graphHeight / 2;
     const viewCenterX = viewWidth / 2;
     const viewCenterY = viewHeight / 2;
-    
+
     const newPanOffset = {
       x: viewCenterX - graphCenterX * newScale,
       y: viewCenterY - graphCenterY * newScale
@@ -595,6 +637,10 @@ export const GcpNetworkTopology: React.FC<GcpNetworkTopologyProps> = ({ chart, i
     
     setScale(newScale);
     setPanOffset(newPanOffset);
+    } catch (err: any) {
+      console.error("GCP Mesh View layout error:", err);
+      setError(err.message || "Failed to parse and layout network topology.");
+    }
   };
 
   // 3. Initialize / Layout Nodes
@@ -928,6 +974,27 @@ export const GcpNetworkTopology: React.FC<GcpNetworkTopologyProps> = ({ chart, i
     );
   };
 
+  const renderError = () => (
+    <div className="flex-1 flex flex-col items-center justify-center p-8 bg-slate-950 rounded-xl border border-slate-800/80 min-h-[440px] text-center">
+      <div className="w-16 h-16 rounded-full bg-rose-500/10 border border-rose-500/20 flex items-center justify-center mb-4 shadow-[0_0_15px_rgba(244,63,94,0.15)] animate-pulse">
+        <AlertCircle className="w-8 h-8 text-rose-400" />
+      </div>
+      <h4 className="text-base font-bold text-white mb-2">Network Mesh Generation Paused</h4>
+      <p className="text-xs text-slate-400 max-w-md leading-relaxed mb-6">
+        The generated architecture definition contains custom styling or structure that our direct canvas parsing engine couldn't map securely. 
+        Don't worry—the standard Mermaid compilation view is available as a premium fallback!
+      </p>
+      <div className="bg-slate-900/50 p-4 rounded-xl border border-slate-800/60 max-w-xl text-left font-mono text-xs text-rose-300/90 overflow-auto max-h-[160px] w-full mb-6">
+        <span className="font-bold text-rose-400 block mb-1">Details:</span>
+        {error}
+      </div>
+      <div className="text-[11px] text-slate-500 flex items-center gap-1">
+        <Info className="w-3.5 h-3.5 text-cyan-400" />
+        <span>Use the "Standard (Mermaid)" tab above to view the compiled diagram.</span>
+      </div>
+    </div>
+  );
+
   return (
     <>
       {/* 1. Inline Standard View */}
@@ -935,10 +1002,10 @@ export const GcpNetworkTopology: React.FC<GcpNetworkTopologyProps> = ({ chart, i
         <div className="relative flex flex-col md:flex-row gap-5 transition-all duration-300 w-full">
           <div className={`flex-1 flex flex-col bg-slate-950 rounded-xl border border-slate-800/80 overflow-hidden relative transition-all duration-300 ${isExpanded ? 'min-h-[740px]' : 'min-h-[460px]'}`}>
             {renderToolbar()}
-            {renderCanvas(isExpanded ? 'h-[720px]' : 'h-[440px]', false)}
+            {error ? renderError() : renderCanvas(isExpanded ? 'h-[720px]' : 'h-[440px]', false)}
           </div>
 
-          {selectedNode && (
+          {selectedNode && !error && (
             <div className="w-full md:w-[320px] bg-slate-900/60 p-5 rounded-xl border border-slate-800/80 backdrop-blur-md flex flex-col transition-all animate-fadeIn">
               {renderSidebarContent()}
             </div>
@@ -969,9 +1036,9 @@ export const GcpNetworkTopology: React.FC<GcpNetworkTopologyProps> = ({ chart, i
 
             {/* Modal Body */}
             <div className="flex-1 flex flex-col md:flex-row overflow-hidden relative">
-              {renderCanvas('h-full', true)}
+              {error ? renderError() : renderCanvas('h-full', true)}
               
-              {selectedNode && (
+              {selectedNode && !error && (
                 <div className="w-full md:w-[320px] h-full border-t md:border-t-0 md:border-l border-slate-800/80 bg-slate-900/40 p-5 flex flex-col overflow-y-auto">
                   {renderSidebarContent()}
                 </div>
