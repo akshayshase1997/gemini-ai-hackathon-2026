@@ -1,0 +1,13 @@
+node_modules
+**/node_modules
+dist
+**/dist
+.git
+.gitignore
+.env
+.env.local
+backend/.env.local
+frontend/.env.local
+npm-debug.log*
+README.md
+docs
